@@ -1,1 +1,1 @@
-@start ../dasbox/bin/dasbox.exe playground.das
+@start ../dasbox/bin/dasbox.exe src/dalaga.das

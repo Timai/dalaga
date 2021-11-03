@@ -27,6 +27,7 @@ struct mob_info
     vel : float2
     rad : float
     health : float
+    score : int
     guns : array<gun_info>
 
 enum gun_type
@@ -41,7 +42,6 @@ struct gun_info
     dir   : float2
     pos   : float2
     rad   : float
-    size  : float
     speed : float
     offset: float2
     timer : float
@@ -71,16 +71,24 @@ var
     g_assets : assets_lib
     g_scene : scene
 
+def remove_if( var src ; cb )
+    var idx = length( src ) - 1
+    while idx >= 0
+        if invoke( cb, src[idx] )
+            src[idx] <- src[length(src) - 1]
+            pop( src )
+        idx--
+
+
 
 def setup_gun( t : gun_type ) : array<gun_info>
     var res : array<gun_info>
     var g : gun_info
     g.dir = float2( 0, 1 )
     g.offset = float2( 0., 5. )
-    g.size = 1.
     g.speed = 4.
     g.timer = 0.
-    g.rad = 1.5
+    g.rad = 2.5
     g.timeout = 0.1
     g.damage = 1.
     push( res, g )
@@ -90,10 +98,11 @@ def setup_gun( t : gun_type ) : array<gun_info>
 def spawn_mob( pos : float ; t: mob_type )
     var m : mob_info
     m.t = t
-    m.health = 10.
+    m.health = 5.
     m.rad = 10.
     m.pos.x = pos
     m.vel = float2( 0, -1 ) * 3.f
+    m.score = 1
 
     m.pos.y = float( TARGET_H ) - m.rad
     m.pos.x = max( m.pos.x, m.rad )
@@ -198,49 +207,65 @@ def process_gun( pos: float2 ; var guns: array<gun_info>& ; dt : float )
             b.dmg = g.damage
             push( g_scene.bullets, b )
 
-// def process_bullet_collision()
+def check_sphere_collision( p1 : float2 ; p2 : float2 ; r1 : float ; r2 : float ) : bool
+    var rs = r1 + r2
+    rs *= rs
+    return rs >= length_sq( p1 - p2 )
 
+
+def process_bullet_collision( pos : float2 ; rad : float ; player : bool ) : float
+    var dmg = 0.
+    for b in g_scene.bullets
+        if check_sphere_collision( pos, b.pos, rad, b.rad )
+            dmg += b.dmg
+            b.dmg = 0.
+    return dmg
 
 
 def process_act( dt: float )
     if g_paused
         return
 
+    // player pos
     g_scene.player.pos += g_scene.player.vel * dt
     g_scene.player.pos.x = max( g_scene.player.pos.x, g_scene.player.rad )
     g_scene.player.pos.y = max( g_scene.player.pos.y, g_scene.player.rad )
     g_scene.player.pos.x = min( g_scene.player.pos.x, float(TARGET_W) - g_scene.player.rad )
     g_scene.player.pos.y = min( g_scene.player.pos.y, float(TARGET_H) - g_scene.player.rad )
 
-
+    // guns
     if g_scene.player.gun_active
         process_gun( g_scene.player.pos, g_scene.player.guns, dt )
 
+    // bullets
     for b in g_scene.bullets
         b.pos += b.vel
+        if b.pos.x < b.rad || b.pos.x > ( float(TARGET_W) - b.rad ) || b.pos.y < b.rad || b.pos.y > ( float(TARGET_H) - b.rad )
+            b.dmg = 0.
 
     for m in g_scene.mobs
+        m.health -= process_bullet_collision( m.pos, m.rad, false )
+
+    remove_if( g_scene.bullets ) <| $(v : bullet)
+        return v.dmg <= 0.
+
+    // debug( "bullets:{length(g_scene.bullets)}" )
+
+    // mobs
+    for m in g_scene.mobs
         m.pos += m.vel
+        if ( m.pos.y - m.rad ) < 0.
+            m.health = 0.
 
-    // var bullet_gen <- generator<bullet>() <| $()
-    //     for b in g_scene.bullets
-    //         if b.pos.x < b.rad || b.pos.x > ( float(TARGET_W) - b.rad ) || b.pos.y < b.rad || b.pos.y > ( float(TARGET_H) - b.rad )
-    //             yield b
-    //     return false
-    // erase( g_scene.bullets, bullet_gen )
-
-    var idx = length( g_scene.bullets ) - 1
-    while idx >= 0
-        let b = g_scene.bullets[idx]
-        if b.pos.x < b.rad || b.pos.x > ( float(TARGET_W) - b.rad ) || b.pos.y < b.rad || b.pos.y > ( float(TARGET_H) - b.rad )
-            g_scene.bullets[idx] = g_scene.bullets[length(g_scene.bullets) - 1]
-            pop( g_scene.bullets )
-        idx--
+    remove_if( g_scene.mobs ) <| $(v : mob_info)
+        return v.health <= 0.
 
     g_scene.spawner -= dt
     if ( g_scene.spawner <= 0. )
         g_scene.spawner = 0.5f + random_float( g_scene.rnd_seed ) * 1.
         spawn_mob( random_float( g_scene.rnd_seed ) * float( TARGET_W ), mob_type scroller_dummy )
+
+    debug( "mobs:{length(g_scene.mobs)}" );
 
     g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
 
