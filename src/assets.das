@@ -8,15 +8,17 @@ struct atls_stars
     height : int
     frames : int
 
-struct atls_player
+struct atls_dyn
     img : Image
     width : int
     height : int
     frames : int
+    scale : int
 
 struct assets_lib
     stars: atls_stars
-    player: atls_player
+    player: atls_dyn
+    mobs : atls_dyn[2]
 
 def private setup_stars() : atls_stars
     var res : atls_stars
@@ -36,11 +38,12 @@ def private setup_stars() : atls_stars
     {{ ' ' => 0x0; '#' => 0xffffffff; '@' => 0xff777777 }} )
     return <- res
 
-def private setup_player() : atls_player
-    var res  : atls_player
+def private setup_player() : atls_dyn
+    var res  : atls_dyn
     res.width = 17
     res.height = 8
     res.frames = 1
+    res.scale = 2
 
     res.img <- create_image( res.width * res.frames, res.height,
     "        @        " +
@@ -54,10 +57,49 @@ def private setup_player() : atls_player
     {{ ' ' => 0x0; '#' => 0xffffffff; '@' => 0xff777777; '$' => 0xff0000ff }} )
     return <- res
 
+def private setup_mob_type_0() : atls_dyn
+    var res  : atls_dyn
+    res.width = 15
+    res.height = 7
+    res.frames = 1
+    res.scale = 2
+
+    res.img <- create_image( res.width * res.frames, res.height,
+    "@#############@" +
+    " @#####$#####@ " +
+    "  @####$####@  " +
+    "   @###$###@   " +
+    "    @##$##@    " +
+    "     @###@     " +
+    "      @#@      ",
+    {{ ' ' => 0x0; '#' => 0xffffffff; '@' => 0xff777777; '$' => 0xffff0000 }} )
+    return <- res
+
+def private setup_mob_type_1() : atls_dyn
+    var res  : atls_dyn
+    res.width = 15
+    res.height = 7
+    res.frames = 1
+    res.scale = 2
+
+    res.img <- create_image( res.width * res.frames, res.height,
+    "@#############@" +
+    " @#####$#####@ " +
+    "  @####$####@  " +
+    "   @###$###@   " +
+    "    ###$###    " +
+    "    #@###@#    " +
+    "    # @#@ #    ",
+    {{ ' ' => 0x0; '#' => 0xffffff55; '@' => 0xff777777; '$' => 0xffff0000 }} )
+    return <- res
+
+
 def setup_assets() : assets_lib
     var lib : assets_lib
 
     lib.stars <- setup_stars()
     lib.player <- setup_player()
+    lib.mobs[0] <- setup_mob_type_0()
+    lib.mobs[1] <- setup_mob_type_1()
 
     return <- lib

@@ -9,6 +9,7 @@ let
     PLAYER_W = 9
     PLAYER_H = 5
     PLAYER_SPD = 333.
+    PLAYER_MAX_HEALTH = 10
 
     BKG_SCROLL_SPD = 50.
 
@@ -16,7 +17,7 @@ struct player_info
     pos : float2
     vel : float2
     rad : float
-    health : float
+    health : int
     guns : array<gun_info>
     gun_active : bool
     // immortal_timer : float
@@ -26,17 +27,19 @@ struct mob_info
     pos : float2
     vel : float2
     rad : float
-    health : float
+    health : int
     score : int
+    atl_idx : int
     guns : array<gun_info>
 
 enum gun_type
     basic
-    fast
+    mob_double
     gun_type_count
 
 enum mob_type
     scroller_dummy
+    scroller_shooter
 
 struct gun_info
     dir   : float2
@@ -46,7 +49,7 @@ struct gun_info
     offset: float2
     timer : float
     timeout : float
-    damage : float
+    damage : int
 
 struct scene
     player  : player_info
@@ -55,17 +58,18 @@ struct scene
     spawner : float
     bkg_scroll : float
     rnd_seed : int4
+    score : int
 
 struct bullet
     pos : float2
     vel : float2
     rad : float
-    dmg : float
+    dmg : int
 
 var
     g_screen_scale : int = 2
     g_screen_scale_max : int
-    g_draw_debug : bool = true
+    g_draw_debug : bool = false
     g_paused : bool = false
 
     g_assets : assets_lib
@@ -80,33 +84,64 @@ def remove_if( var src ; cb )
         idx--
 
 
-
-def setup_gun( t : gun_type ) : array<gun_info>
+def setup_gun( t : gun_type ; s : int ) : array<gun_info>
     var res : array<gun_info>
     var g : gun_info
-    g.dir = float2( 0, 1 )
-    g.offset = float2( 0., 5. )
-    g.speed = 4.
-    g.timer = 0.
-    g.rad = 2.5
-    g.timeout = 0.1
-    g.damage = 1.
-    push( res, g )
+
+    if t == gun_type mob_double
+        g.dir = float2( 0, -1 )
+        g.offset = float2( .25, -5. ) * float( s )
+        g.speed = 100.
+        g.timer = 0.
+        g.rad = 3.
+        g.timeout = 1.
+        g.damage = 1
+        push( res, g )
+        g.offset.x = 0.75
+        push( res, g )
+    else
+        g.dir = float2( 0, 1 )
+        g.offset = float2( .5, 5. ) * float( s )
+        g.speed = 400.
+        g.timer = 0.
+        g.rad = 2.5
+        g.timeout = 0.1
+        g.damage = 1
+        push( res, g )
 
     return <- res
 
 def spawn_mob( pos : float ; t: mob_type )
     var m : mob_info
     m.t = t
-    m.health = 5.
-    m.rad = 10.
-    m.pos.x = pos
-    m.vel = float2( 0, -1 ) * 3.f
-    m.score = 1
+    var gn = gun_type gun_type_count
 
-    m.pos.y = float( TARGET_H ) - m.rad
-    m.pos.x = max( m.pos.x, m.rad )
-    m.pos.x = min( m.pos.x, float( TARGET_W ) - m.rad  )
+    if t == mob_type scroller_shooter
+        m.health = 5
+        m.rad = 12.
+        m.pos.x = pos
+        m.vel = float2( 0, -1 ) * 222.f
+        m.score = 3
+        m.atl_idx = 1
+
+        m.pos.y = float( TARGET_H ) - m.rad
+        m.pos.x = max( m.pos.x, m.rad )
+        m.pos.x = min( m.pos.x, float( TARGET_W ) - m.rad  )
+        gn = gun_type mob_double
+    else
+        m.health = 5
+        m.rad = 12.
+        m.pos.x = pos
+        m.vel = float2( 0, -1 ) * 222.f
+        m.score = 1
+        m.atl_idx = 0
+
+        m.pos.y = float( TARGET_H ) - m.rad
+        m.pos.x = max( m.pos.x, m.rad )
+        m.pos.x = min( m.pos.x, float( TARGET_W ) - m.rad  )
+
+    if gn != gun_type gun_type_count
+        m.guns <- setup_gun( gn, g_assets.mobs[m.atl_idx].scale )
 
     emplace( g_scene.mobs, m )
 
@@ -142,44 +177,71 @@ def render_bkg()
             let c = 0xff000000 | uint( rnd.x % 16 + 0 ) << 0x10 | uint( rnd.y % 8 + 0 ) << 0x8 | uint( rnd.w % 32 + 16 )
             let s = g_assets.stars.width * ( 1 + rnd.w % g_screen_scale )
 
-            // fill_rect( xx * reg_scaled + 1, yy * reg_scaled + 1 + bkg_delta, reg_scaled - 2, reg_scaled - 2, c )
-            draw_image_region( g_assets.stars.img, x, y + bkg_delta, float4( float( f ), 0., fc, fc ), c, float2( s, s ) )
+            if g_scene.player.health > 0
+                draw_image_region( g_assets.stars.img, x, y + bkg_delta, float4( float( f ), 0., fc, fc ), c, float2( s, s ) )
+            else
+                fill_rect( xx * reg_scaled + 1, yy * reg_scaled + 1, reg_scaled - 2, reg_scaled - 2, c )
 
 
 def wpos_to_spos( v : float2 ) : float2
     return float2( v.x, float( TARGET_H ) - v.y ) * float( g_screen_scale )
 
-def draw_dyn_obj( img : Image ; wp : float2 ;  sz : float2 ; c : uint )
+def draw_dyn_obj( img : Image ; wp : float2 ;  sz : float2 ; scale : int ; c : uint )
     let sp = wpos_to_spos( wp )
-    let hss = float(g_screen_scale) * 0.5
-    draw_image_region( img, sp.x - sz.x *hss, sp.y - sz.y * hss, float4( 0., 0., sz.x, sz.y ), c, sz * float( g_screen_scale ) )
+    let hss = float(g_screen_scale * scale) * 0.5
+    draw_image_region( img, sp.x - sz.x *hss, sp.y - sz.y * hss, float4( 0., 0., sz.x, sz.y ), c, sz * float( g_screen_scale * scale ) )
 
 
 def render_dyn()
     let w = float2( g_assets.player.width, g_assets.player.height )
-    draw_dyn_obj( g_assets.player.img, g_scene.player.pos, float2(g_assets.player.width, g_assets.player.height), 0xffffffff )
+    draw_dyn_obj( g_assets.player.img, g_scene.player.pos, float2(g_assets.player.width, g_assets.player.height), g_assets.player.scale, 0xffffffff )
 
     for b in g_scene.bullets
         let bp = wpos_to_spos( b.pos )
         fill_circle( bp.x, bp.y, b.rad, 0xffffffff )
 
-
     for m in g_scene.mobs
-        draw_dyn_obj( g_assets.player.img, m.pos, float2(g_assets.player.width, g_assets.player.height), 0xffff0000 )
+        draw_dyn_obj( g_assets.mobs[m.atl_idx].img, m.pos, float2(g_assets.mobs[m.atl_idx].width, g_assets.mobs[m.atl_idx].height), g_assets.mobs[m.atl_idx].scale, 0xffffffff )
 
 def render_debug()
     if !g_draw_debug
         return
 
     var p = wpos_to_spos( g_scene.player.pos )
-    circle( p.x, p.y, g_scene.player.rad * float( g_screen_scale ), 0xffffffff )
+    circle( p.x, p.y, g_scene.player.rad * float( g_screen_scale * g_assets.player.scale ), 0xffffffff )
 
     for m in g_scene.mobs
         var mp = wpos_to_spos( m.pos )
         circle( mp.x, mp.y, m.rad * float( g_screen_scale ), 0xffff0000 )
 
+def render_ui()
+    let s = int2( 50, 10 )
+    let ofs = int2( ( TARGET_W - s.x ) * g_screen_scale, ( TARGET_H - s.y ) * g_screen_scale )
+    fill_rect( ofs.x, ofs.y, s.x * g_screen_scale, s.y * g_screen_scale, 0xffff0000 )
+    fill_rect( ofs.x, ofs.y, int( float(s.x) * ( float(g_scene.player.health) / float(PLAYER_MAX_HEALTH) ) ) * g_screen_scale, s.y * g_screen_scale, 0xffffffff )
+
+    set_font_name( "mono" )
+    set_font_size( 10 * g_screen_scale )
+    let score_text = "{g_scene.score}"
+    var formated_score = ""
+    for i in range( 0, 10 - length( score_text ) )
+        formated_score += "0"
+    formated_score += score_text
+
+    let sw = get_text_size( formated_score )
+    text_out( ( TARGET_W * g_screen_scale - int( sw.x ) ) / 2, 0, formated_score, 0xff777777 )
+
+    if g_scene.player.health <= 0
+        let txt = "GAME OVER"
+        set_font_size( 40 * g_screen_scale )
+        let w = get_text_size( txt )
+        text_out( ( TARGET_W * g_screen_scale - int( w.x ) ) / 2, ( TARGET_H * g_screen_scale - int( w.y ) ) / 2, txt, 0xffff0000 )
 
 def process_input()
+    if g_scene.player.health <= 0 && get_key_up( VK_SPACE )
+        reset()
+        return
+
     var dx = float2( 0, 0 )
     dx.x += get_key( VK_RIGHT ) || get_key( VK_D ) ? +1. : 0.
     dx.x += get_key( VK_LEFT ) || get_key( VK_A ) ? -1. : 0.
@@ -195,7 +257,7 @@ def process_input()
     g_scene.player.gun_active = get_key( VK_SPACE ) || get_mouse_button_down( MB_LEFT )
 
 
-def process_gun( pos: float2 ; var guns: array<gun_info>& ; dt : float )
+def process_gun( pos: float2 ; vel: float2 ; var guns: array<gun_info>& ; dt : float )
     for g in guns
         g.timer += dt
         while g.timer > g.timeout
@@ -203,7 +265,7 @@ def process_gun( pos: float2 ; var guns: array<gun_info>& ; dt : float )
             var b : bullet
             b.pos = pos + g.offset
             b.rad = g.rad
-            b.vel = g.dir * g.speed
+            b.vel = g.dir * ( g.speed + max( vel.y * ( vel.y > 0. ? 1. : -1. ), 0. ) )
             b.dmg = g.damage
             push( g_scene.bullets, b )
 
@@ -213,17 +275,18 @@ def check_sphere_collision( p1 : float2 ; p2 : float2 ; r1 : float ; r2 : float 
     return rs >= length_sq( p1 - p2 )
 
 
-def process_bullet_collision( pos : float2 ; rad : float ; player : bool ) : float
-    var dmg = 0.
+def process_bullet_collision( pos : float2 ; rad : float ; player : bool ) : int
+    var dmg = 0
     for b in g_scene.bullets
-        if check_sphere_collision( pos, b.pos, rad, b.rad )
+        let check = ( player && b.vel.y > 0. ) || ( !player && b.vel.y < 0. )
+        if check && check_sphere_collision( pos, b.pos, rad, b.rad )
             dmg += b.dmg
-            b.dmg = 0.
+            b.dmg = 0
     return dmg
 
 
 def process_act( dt: float )
-    if g_paused
+    if g_paused || g_scene.player.health <= 0
         return
 
     // player pos
@@ -235,37 +298,47 @@ def process_act( dt: float )
 
     // guns
     if g_scene.player.gun_active
-        process_gun( g_scene.player.pos, g_scene.player.guns, dt )
+        process_gun( g_scene.player.pos, g_scene.player.vel, g_scene.player.guns, dt )
 
     // bullets
     for b in g_scene.bullets
-        b.pos += b.vel
+        b.pos += b.vel * dt
         if b.pos.x < b.rad || b.pos.x > ( float(TARGET_W) - b.rad ) || b.pos.y < b.rad || b.pos.y > ( float(TARGET_H) - b.rad )
-            b.dmg = 0.
+            b.dmg = 0
 
+    g_scene.player.health -= process_bullet_collision( g_scene.player.pos, g_scene.player.rad, false )
+    g_scene.player.health = max( g_scene.player.health, 0 )
     for m in g_scene.mobs
-        m.health -= process_bullet_collision( m.pos, m.rad, false )
+        m.health -= process_bullet_collision( m.pos, m.rad, true )
+        if m.health <= 0
+            g_scene.score += m.score
 
     remove_if( g_scene.bullets ) <| $(v : bullet)
-        return v.dmg <= 0.
-
-    // debug( "bullets:{length(g_scene.bullets)}" )
+        return v.dmg <= 0
 
     // mobs
     for m in g_scene.mobs
-        m.pos += m.vel
+        m.pos += m.vel * dt
         if ( m.pos.y - m.rad ) < 0.
-            m.health = 0.
+            m.health = 0
+        else
+            process_gun( m.pos, m.vel, m.guns, dt )
 
     remove_if( g_scene.mobs ) <| $(v : mob_info)
-        return v.health <= 0.
+        return v.health <= 0
 
     g_scene.spawner -= dt
     if ( g_scene.spawner <= 0. )
         g_scene.spawner = 0.5f + random_float( g_scene.rnd_seed ) * 1.
-        spawn_mob( random_float( g_scene.rnd_seed ) * float( TARGET_W ), mob_type scroller_dummy )
+        let rnd = random_float( g_scene.rnd_seed )
+        var t = mob_type scroller_dummy
+        if ( rnd < 0.25 )
+            t = mob_type scroller_shooter
 
-    debug( "mobs:{length(g_scene.mobs)}" );
+        spawn_mob( random_float( g_scene.rnd_seed ) * float( TARGET_W ), t )
+
+    // debug( "bullets:{length(g_scene.bullets)}" )
+    // debug( "mobs:{length(g_scene.mobs)}" );
 
     g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
 
@@ -277,33 +350,27 @@ def reset()
     g_scene.player.rad = float( g_assets.player.width ) * 0.4
     g_scene.player.pos = float2( float( TARGET_W / 2 ), g_scene.player.rad )
     g_scene.player.gun_active = false
-    clear( g_scene.player.guns ) // ????????????
+    clear( g_scene.player.guns )
     clear( g_scene.bullets )
     clear( g_scene.mobs )
-    g_scene.player.guns <- setup_gun( gun_type basic )
-    g_scene.player.health = 100.
+    g_scene.player.guns <- setup_gun( gun_type basic, g_assets.player.scale )
+    g_scene.player.health = PLAYER_MAX_HEALTH
     g_scene.bkg_scroll = 0.
     g_scene.spawner = 1.
+    g_scene.score = 0
     randomize_seed( g_scene.rnd_seed )
 
 [export]
 def initialize
-    set_window_title("Playground")
+    set_window_title("dalaga")
     let h = float( get_desktop_height() ) * 0.95
     g_screen_scale_max = max( int( h / float(TARGET_H) ), 1 )
     reinit()
     setup_data()
     reset()
 
-// def update_input()
-//     let jump = get_key(VK_SPACE)
-
-// def update_gameplay(dt: float)
-//     update_bird(bird, dt)
-
 [export]
 def act(dt: float)
-    // print("act dt={dt}\n")
     if get_key(VK_ESCAPE)
         schedule_quit_game()
     if get_key_up(VK_T)
@@ -312,8 +379,8 @@ def act(dt: float)
         g_paused = ! g_paused
     if get_key_up(VK_O)
         g_draw_debug = !g_draw_debug
-    // if get_key(VK_X)
-    //     g_screen_scale = ( g_screen_scale + 1 ) % ( g_screen_scale_max + 1 )
+    if get_key(VK_X)
+        g_screen_scale = ( g_screen_scale ) % ( g_screen_scale_max ) + 1
         reinit()
     process_input()
     process_act(dt)
@@ -322,4 +389,5 @@ def act(dt: float)
 def draw()
     render_bkg()
     render_dyn()
+    render_ui()
     render_debug()
