@@ -18,7 +18,7 @@ struct atls_dyn
 struct assets_lib
     stars: atls_stars
     player: atls_dyn
-    mobs : atls_dyn[2]
+    mobs : atls_dyn[3]
 
 def private setup_stars() : atls_stars
     var res : atls_stars
@@ -93,6 +93,23 @@ def private setup_mob_type_1() : atls_dyn
     {{ ' ' => 0x0; '#' => 0xffffff55; '@' => 0xff777777; '$' => 0xffff0000 }} )
     return <- res
 
+def private setup_mob_type_2() : atls_dyn
+    var res  : atls_dyn
+    res.width = 13
+    res.height = 6
+    res.frames = 1
+    res.scale = 2
+
+    res.img <- create_image( res.width * res.frames, res.height,
+    "   @@@@@@@   " +
+    "  @#######@  " +
+    "@###@@@@@###@" +
+    "@##@@@@@@@##@" +
+    "@##@@   @@##@" +
+    "@##@     @##@",
+    {{ ' ' => 0x0; '#' => 0xffff3333; '@' => 0xff770000; '$' => 0xffff0000 }} )
+    return <- res
+
 
 def setup_assets() : assets_lib
     var lib : assets_lib
@@ -101,5 +118,6 @@ def setup_assets() : assets_lib
     lib.player <- setup_player()
     lib.mobs[0] <- setup_mob_type_0()
     lib.mobs[1] <- setup_mob_type_1()
+    lib.mobs[2] <- setup_mob_type_2()
 
     return <- lib

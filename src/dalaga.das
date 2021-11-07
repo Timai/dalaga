@@ -14,6 +14,9 @@ let
     PLAYER_IMMORTAL_BLINKER_COUNT = 10
     PLAYER_IMMORTAL_BLINKER_SEG = PLAYER_IMMORTAL_TIMER / float(PLAYER_IMMORTAL_BLINKER_COUNT)
 
+    MOB_STATIC_SPEED = 200.
+    MOB_CHASER_SPEED = 50.
+
     BKG_SCROLL_SPD = 50.
     COLLISION_DMG = 1
 
@@ -34,6 +37,7 @@ struct mob_info
     health : int
     score : int
     atl_idx : int
+    speed : float
     guns : array<gun_info>
 
 enum gun_type
@@ -42,11 +46,13 @@ enum gun_type
     super_rows
     radial
     mob_double
+    mob_double_wide
     gun_type_count
 
 enum mob_type
     scroller_dummy
     scroller_shooter
+    chaser_shooter
 
 struct gun_info
     dir   : float2
@@ -102,14 +108,16 @@ def setup_gun( t : gun_type ; s : int ) : array<gun_info>
     var res : array<gun_info>
     var g : gun_info
 
+    g.dir = float2( 0, 1 )
+    g.timer = 0.
+
     if t == gun_type radial
         g.dir = float2( 0.4, 0.9 )
         g.offset = float2( 3., 5. ) * float( s )
         g.speed = 400.
-        g.timer = 0.
         g.rad = 3.
         g.timeout = 0.1
-        g.damage = 1
+        g.damage = 3
         push( res, g )
         g.offset.x = -3. * float( s )
         g.dir = float2( -0.4, 0.9 )
@@ -118,13 +126,11 @@ def setup_gun( t : gun_type ; s : int ) : array<gun_info>
         g.dir = float2( 0, 1 )
         push( res, g )
     elif t == gun_type super_rows
-        g.dir = float2( 0, 1 )
         g.offset = float2( 4., 5. ) * float( s )
         g.speed = 400.
-        g.timer = 0.
         g.rad = 2.
         g.timeout = 0.1
-        g.damage = 1
+        g.damage = 2
         push( res, g )
         g.offset.x = -4. * float( s )
         push( res, g )
@@ -135,10 +141,8 @@ def setup_gun( t : gun_type ; s : int ) : array<gun_info>
         g.offset.x = 0.
         push( res, g )
     elif t == gun_type fast_rows
-        g.dir = float2( 0, 1 )
         g.offset = float2( 3., 5. ) * float( s )
         g.speed = 400.
-        g.timer = 0.
         g.rad = 1.
         g.timeout = 0.1
         g.damage = 1
@@ -149,20 +153,27 @@ def setup_gun( t : gun_type ; s : int ) : array<gun_info>
         push( res, g )
     elif t == gun_type mob_double
         g.dir = float2( 0, -1 )
-        g.offset = float2( .25, -5. ) * float( s )
+        g.offset = float2( 2., -5. ) * float( s )
         g.speed = 100.
-        g.timer = 0.
-        g.rad = 2.
+        g.rad = 1.5
         g.timeout = 1.
         g.damage = 1
         push( res, g )
-        g.offset.x = 0.75
+        g.offset.x = -2. * float( s )
+        push( res, g )
+    elif t == gun_type mob_double_wide
+        g.dir = float2( 0, -1 )
+        g.offset = float2( 5., -5. ) * float( s )
+        g.speed = 150.
+        g.rad = 1.
+        g.timeout = 0.75
+        g.damage = 1
+        push( res, g )
+        g.offset.x = -5. * float( s )
         push( res, g )
     else
-        g.dir = float2( 0, 1 )
         g.offset = float2( .5, 5. ) * float( s )
         g.speed = 400.
-        g.timer = 0.
         g.rad = 1.5
         g.timeout = 0.1
         g.damage = 1
@@ -179,28 +190,31 @@ def spawn_mob( pos : float ; t: mob_type )
         m.health = 5
         m.rad = 12.
         m.pos.x = pos
-        m.vel = float2( 0, -1 ) * 222.f
+        m.vel = float2( 0, -1 ) * MOB_STATIC_SPEED
         m.score = 3
         m.atl_idx = 1
-
-        m.pos.y = float( TARGET_H ) - m.rad
-        m.pos.x = max( m.pos.x, m.rad )
-        m.pos.x = min( m.pos.x, float( TARGET_W ) - m.rad  )
         gn = gun_type mob_double
+    elif t == mob_type chaser_shooter
+        m.health = 5
+        m.rad = 12.
+        m.pos.x = pos
+        m.vel = float2( 0, -1 ) * MOB_STATIC_SPEED
+        m.score = 10
+        m.atl_idx = 2
+        gn = gun_type mob_double_wide
     else
         m.health = 5
         m.rad = 12.
         m.pos.x = pos
-        m.vel = float2( 0, -1 ) * 222.f
+        m.vel = float2( 0, -1 ) * MOB_STATIC_SPEED
         m.score = 1
         m.atl_idx = 0
-
-        m.pos.y = float( TARGET_H ) - m.rad
-        m.pos.x = max( m.pos.x, m.rad )
-        m.pos.x = min( m.pos.x, float( TARGET_W ) - m.rad  )
-
     if gn != gun_type gun_type_count
         m.guns <- setup_gun( gn, g_assets.mobs[m.atl_idx].scale )
+
+    m.pos.y = float( TARGET_H ) - m.rad
+    m.pos.x = max( m.pos.x, m.rad )
+    m.pos.x = min( m.pos.x, float( TARGET_W ) - m.rad  )
 
     emplace( g_scene.mobs, m )
 
@@ -415,14 +429,28 @@ def process_act( dt: float )
         return v.timer <= 0.
 
     // mobs
-    for m in g_scene.mobs
+    var chasers : array<int>
+    for i in range( 0, length( g_scene.mobs ) )
+        var m& = g_scene.mobs[i]
         m.pos += m.vel * dt
         if ( m.pos.y - m.rad ) < 0.
             m.health = 0
         if m.health > 0
+            if m.t == mob_type chaser_shooter
+                push( chasers, i )
             process_gun( m.pos, m.vel, m.guns, dt )
             if check_sphere_collision( m.pos, g_scene.player.pos, m.rad, g_scene.player.rad )
                 player_dmg += COLLISION_DMG
+
+    for i in chasers
+        var m& = g_scene.mobs[i]
+        let v = m.pos.x - g_scene.player.pos.x
+        m.vel.y = -MOB_STATIC_SPEED
+        m.vel.x = 0.
+        if ( v > 0. )
+            m.vel.x = -MOB_CHASER_SPEED
+        elif ( v < 0. )
+            m.vel.x = MOB_CHASER_SPEED
 
     remove_if( g_scene.mobs ) <| $(v : mob_info)
         return v.health <= 0
@@ -433,6 +461,8 @@ def process_act( dt: float )
         let rnd = random_float( g_scene.rnd_seed )
         var t = mob_type scroller_dummy
         if ( rnd < 0.25 )
+            t = mob_type chaser_shooter
+        elif ( rnd < 0.5 )
             t = mob_type scroller_shooter
 
         spawn_mob( random_float( g_scene.rnd_seed ) * float( TARGET_W ), t )
@@ -464,6 +494,8 @@ def reset()
     g_scene.bkg_scroll = 0.
     g_scene.spawner = 1.
     g_scene.score = 0
+    clear( g_scene.bullets )
+    clear( g_scene.mobs )
     randomize_seed( g_scene.rnd_seed )
 
 [export]
@@ -494,6 +526,6 @@ def act(dt: float)
 [export]
 def draw()
     render_bkg()
-    render_dyn()
     render_ui()
+    render_dyn()
     render_debug()
