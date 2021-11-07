@@ -34,6 +34,9 @@ struct mob_info
 
 enum gun_type
     basic
+    fast_rows
+    super_rows
+    radial
     mob_double
     gun_type_count
 
@@ -55,6 +58,7 @@ struct scene
     player  : player_info
     bullets : array<bullet>
     mobs    : array<mob_info>
+    powerups : array<powerup>
     spawner : float
     bkg_scroll : float
     rnd_seed : int4
@@ -65,6 +69,12 @@ struct bullet
     vel : float2
     rad : float
     dmg : int
+
+struct powerup
+    pos : float2
+    gtype : gun_type
+    timer : float = 5.
+    rad = 10.
 
 var
     g_screen_scale : int = 2
@@ -88,12 +98,57 @@ def setup_gun( t : gun_type ; s : int ) : array<gun_info>
     var res : array<gun_info>
     var g : gun_info
 
-    if t == gun_type mob_double
+    if t == gun_type radial
+        g.dir = float2( 0.4, 0.9 )
+        g.offset = float2( 3., 5. ) * float( s )
+        g.speed = 400.
+        g.timer = 0.
+        g.rad = 3.
+        g.timeout = 0.1
+        g.damage = 1
+        push( res, g )
+        g.offset.x = -3. * float( s )
+        g.dir = float2( -0.4, 0.9 )
+        push( res, g )
+        g.offset.x = 0.
+        g.dir = float2( 0, 1 )
+        push( res, g )
+    elif t == gun_type super_rows
+        g.dir = float2( 0, 1 )
+        g.offset = float2( 4., 5. ) * float( s )
+        g.speed = 400.
+        g.timer = 0.
+        g.rad = 2.
+        g.timeout = 0.1
+        g.damage = 1
+        push( res, g )
+        g.offset.x = -4. * float( s )
+        push( res, g )
+        g.offset.x = -8. * float( s )
+        push( res, g )
+        g.offset.x = 8. * float( s )
+        push( res, g )
+        g.offset.x = 0.
+        push( res, g )
+    elif t == gun_type fast_rows
+        g.dir = float2( 0, 1 )
+        g.offset = float2( 3., 5. ) * float( s )
+        g.speed = 400.
+        g.timer = 0.
+        g.rad = 1.
+        g.timeout = 0.1
+        g.damage = 1
+        push( res, g )
+        g.offset.x = -3. * float( s )
+        push( res, g )
+        g.offset.x = 0.
+        push( res, g )
+    elif t == gun_type mob_double
         g.dir = float2( 0, -1 )
         g.offset = float2( .25, -5. ) * float( s )
         g.speed = 100.
         g.timer = 0.
-        g.rad = 3.
+        g.rad = 2.
         g.timeout = 1.
         g.damage = 1
         push( res, g )
@@ -104,7 +159,7 @@ def setup_gun( t : gun_type ; s : int ) : array<gun_info>
         g.offset = float2( .5, 5. ) * float( s )
         g.speed = 400.
         g.timer = 0.
-        g.rad = 2.5
+        g.rad = 1.5
         g.timeout = 0.1
         g.damage = 1
         push( res, g )
@@ -198,10 +253,18 @@ def render_dyn()
 
     for b in g_scene.bullets
         let bp = wpos_to_spos( b.pos )
-        fill_circle( bp.x, bp.y, b.rad, 0xffffffff )
+        fill_circle( bp.x, bp.y, b.rad * float( g_screen_scale ), 0xffffffff )
 
     for m in g_scene.mobs
         draw_dyn_obj( g_assets.mobs[m.atl_idx].img, m.pos, float2(g_assets.mobs[m.atl_idx].width, g_assets.mobs[m.atl_idx].height), g_assets.mobs[m.atl_idx].scale, 0xffffffff )
+
+    for p in g_scene.powerups
+        let bp = wpos_to_spos( p.pos )
+        circle( bp.x, bp.y, p.rad * float( g_screen_scale ), 0xffffffff )
+        if p.gtype == gun_type super_rows || p.gtype == gun_type radial
+            circle( bp.x, bp.y, p.rad * 0.75 * float( g_screen_scale ), 0xfff0000 )
+        if p.gtype == gun_type radial
+            circle( bp.x, bp.y, p.rad * 0.5 * float( g_screen_scale ), 0xffffff00 )
 
 def render_debug()
     if !g_draw_debug
@@ -306,15 +369,44 @@ def process_act( dt: float )
         if b.pos.x < b.rad || b.pos.x > ( float(TARGET_W) - b.rad ) || b.pos.y < b.rad || b.pos.y > ( float(TARGET_H) - b.rad )
             b.dmg = 0
 
-    g_scene.player.health -= process_bullet_collision( g_scene.player.pos, g_scene.player.rad, false )
+    let player_dmg = process_bullet_collision( g_scene.player.pos, g_scene.player.rad, false )
+    g_scene.player.health -= player_dmg
     g_scene.player.health = max( g_scene.player.health, 0 )
+    if player_dmg > 0
+        g_scene.player.guns <- setup_gun( gun_type basic, g_assets.player.scale )
+
     for m in g_scene.mobs
         m.health -= process_bullet_collision( m.pos, m.rad, true )
         if m.health <= 0
             g_scene.score += m.score
 
+            if random_float( g_scene.rnd_seed ) < 0.2
+                var p = powerup()
+                p.pos = m.pos
+                let rnd = random_float( g_scene.rnd_seed )
+                p.gtype = gun_type radial
+                if rnd < 0.5
+                    p.gtype = gun_type fast_rows
+                elif rnd < 0.8
+                    p.gtype = gun_type super_rows
+
+                push( g_scene.powerups, p )
+
+
     remove_if( g_scene.bullets ) <| $(v : bullet)
         return v.dmg <= 0
+
+    // poweups
+    for p in g_scene.powerups
+        p.timer -= dt
+        if ( p.timer > 0. )
+            if check_sphere_collision( p.pos, g_scene.player.pos, p.rad, g_scene.player.rad )
+                g_scene.player.guns <- setup_gun( p.gtype, g_assets.player.scale )
+                p.timer = 0.
+
+
+    remove_if( g_scene.powerups ) <| $(v : powerup)
+        return v.timer <= 0.
 
     // mobs
     for m in g_scene.mobs
