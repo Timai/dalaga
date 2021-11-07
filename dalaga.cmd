@@ -1,0 +1,1 @@
+@start ./dasbox.exe src/dalaga.das
