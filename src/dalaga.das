@@ -12,6 +12,7 @@ let
     PLAYER_MAX_HEALTH = 10
 
     BKG_SCROLL_SPD = 50.
+    COLLISION_DMG = 1
 
 struct player_info
     pos : float2
@@ -20,6 +21,7 @@ struct player_info
     health : int
     guns : array<gun_info>
     gun_active : bool
+    immortal : bool
     // immortal_timer : float
 
 struct mob_info
@@ -369,11 +371,9 @@ def process_act( dt: float )
         if b.pos.x < b.rad || b.pos.x > ( float(TARGET_W) - b.rad ) || b.pos.y < b.rad || b.pos.y > ( float(TARGET_H) - b.rad )
             b.dmg = 0
 
-    let player_dmg = process_bullet_collision( g_scene.player.pos, g_scene.player.rad, false )
-    g_scene.player.health -= player_dmg
-    g_scene.player.health = max( g_scene.player.health, 0 )
-    if player_dmg > 0
-        g_scene.player.guns <- setup_gun( gun_type basic, g_assets.player.scale )
+    var player_dmg = 0
+    if !g_scene.player.immortal
+        player_dmg = process_bullet_collision( g_scene.player.pos, g_scene.player.rad, false )
 
     for m in g_scene.mobs
         m.health -= process_bullet_collision( m.pos, m.rad, true )
@@ -404,7 +404,6 @@ def process_act( dt: float )
                 g_scene.player.guns <- setup_gun( p.gtype, g_assets.player.scale )
                 p.timer = 0.
 
-
     remove_if( g_scene.powerups ) <| $(v : powerup)
         return v.timer <= 0.
 
@@ -413,8 +412,10 @@ def process_act( dt: float )
         m.pos += m.vel * dt
         if ( m.pos.y - m.rad ) < 0.
             m.health = 0
-        else
+        if m.health > 0
             process_gun( m.pos, m.vel, m.guns, dt )
+            if !g_scene.player.immortal && check_sphere_collision( m.pos, g_scene.player.pos, m.rad, g_scene.player.rad )
+                player_dmg += COLLISION_DMG
 
     remove_if( g_scene.mobs ) <| $(v : mob_info)
         return v.health <= 0
@@ -429,10 +430,16 @@ def process_act( dt: float )
 
         spawn_mob( random_float( g_scene.rnd_seed ) * float( TARGET_W ), t )
 
+    // hp
+    g_scene.player.health -= player_dmg
+    g_scene.player.health = max( g_scene.player.health, 0 )
+    if player_dmg > 0
+        g_scene.player.guns <- setup_gun( gun_type basic, g_assets.player.scale )
+
     // debug( "bullets:{length(g_scene.bullets)}" )
     // debug( "mobs:{length(g_scene.mobs)}" );
 
-    g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
+    // g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
 
 def reinit()
     g_screen_scale = g_screen_scale == 0 ? g_screen_scale_max : g_screen_scale
@@ -447,6 +454,7 @@ def reset()
     clear( g_scene.mobs )
     g_scene.player.guns <- setup_gun( gun_type basic, g_assets.player.scale )
     g_scene.player.health = PLAYER_MAX_HEALTH
+    g_scene.player.immortal = false
     g_scene.bkg_scroll = 0.
     g_scene.spawner = 1.
     g_scene.score = 0
