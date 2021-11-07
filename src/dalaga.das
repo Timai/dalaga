@@ -10,19 +10,21 @@ let
     PLAYER_H = 5
     PLAYER_SPD = 333.
     PLAYER_MAX_HEALTH = 10
+    PLAYER_IMMORTAL_TIMER = 1.
+    PLAYER_IMMORTAL_BLINKER_COUNT = 10
+    PLAYER_IMMORTAL_BLINKER_SEG = PLAYER_IMMORTAL_TIMER / float(PLAYER_IMMORTAL_BLINKER_COUNT)
 
     BKG_SCROLL_SPD = 50.
     COLLISION_DMG = 1
 
 struct player_info
     pos : float2
-    vel : float2
-    rad : float
-    health : int
+    vel : float2 = float2( 0.f, 0.2 )
+    rad : float = 12.f
+    health : int = PLAYER_MAX_HEALTH
     guns : array<gun_info>
-    gun_active : bool
-    immortal : bool
-    // immortal_timer : float
+    gun_active : bool = false
+    immortal_timer : float = 0.
 
 struct mob_info
     t   : mob_type
@@ -250,8 +252,12 @@ def draw_dyn_obj( img : Image ; wp : float2 ;  sz : float2 ; scale : int ; c : u
 
 
 def render_dyn()
+    enable_alpha_blend()
+
     let w = float2( g_assets.player.width, g_assets.player.height )
-    draw_dyn_obj( g_assets.player.img, g_scene.player.pos, float2(g_assets.player.width, g_assets.player.height), g_assets.player.scale, 0xffffffff )
+    let blink = int( g_scene.player.immortal_timer / PLAYER_IMMORTAL_BLINKER_SEG ) % 2
+    if blink == 0
+        draw_dyn_obj( g_assets.player.img, g_scene.player.pos, float2(g_assets.player.width, g_assets.player.height), g_assets.player.scale, 0xffffffff )
 
     for b in g_scene.bullets
         let bp = wpos_to_spos( b.pos )
@@ -268,12 +274,14 @@ def render_dyn()
         if p.gtype == gun_type radial
             circle( bp.x, bp.y, p.rad * 0.5 * float( g_screen_scale ), 0xffffff00 )
 
+    disable_alpha_blend()
+
 def render_debug()
     if !g_draw_debug
         return
 
     var p = wpos_to_spos( g_scene.player.pos )
-    circle( p.x, p.y, g_scene.player.rad * float( g_screen_scale * g_assets.player.scale ), 0xffffffff )
+    circle( p.x, p.y, g_scene.player.rad * float( g_screen_scale ), 0xffffffff )
 
     for m in g_scene.mobs
         var mp = wpos_to_spos( m.pos )
@@ -372,8 +380,7 @@ def process_act( dt: float )
             b.dmg = 0
 
     var player_dmg = 0
-    if !g_scene.player.immortal
-        player_dmg = process_bullet_collision( g_scene.player.pos, g_scene.player.rad, false )
+    player_dmg = process_bullet_collision( g_scene.player.pos, g_scene.player.rad, false )
 
     for m in g_scene.mobs
         m.health -= process_bullet_collision( m.pos, m.rad, true )
@@ -414,7 +421,7 @@ def process_act( dt: float )
             m.health = 0
         if m.health > 0
             process_gun( m.pos, m.vel, m.guns, dt )
-            if !g_scene.player.immortal && check_sphere_collision( m.pos, g_scene.player.pos, m.rad, g_scene.player.rad )
+            if check_sphere_collision( m.pos, g_scene.player.pos, m.rad, g_scene.player.rad )
                 player_dmg += COLLISION_DMG
 
     remove_if( g_scene.mobs ) <| $(v : mob_info)
@@ -431,10 +438,15 @@ def process_act( dt: float )
         spawn_mob( random_float( g_scene.rnd_seed ) * float( TARGET_W ), t )
 
     // hp
+    if g_scene.player.immortal_timer > 0.
+        player_dmg = 0
     g_scene.player.health -= player_dmg
     g_scene.player.health = max( g_scene.player.health, 0 )
     if player_dmg > 0
         g_scene.player.guns <- setup_gun( gun_type basic, g_assets.player.scale )
+        g_scene.player.immortal_timer = PLAYER_IMMORTAL_TIMER
+
+    g_scene.player.immortal_timer = max( g_scene.player.immortal_timer - dt, 0. )
 
     // debug( "bullets:{length(g_scene.bullets)}" )
     // debug( "mobs:{length(g_scene.mobs)}" );
@@ -446,15 +458,9 @@ def reinit()
     set_resolution( TARGET_W * g_screen_scale, TARGET_H * g_screen_scale )
 
 def reset()
-    g_scene.player.rad = float( g_assets.player.width ) * 0.4
+    g_scene.player := player_info()
     g_scene.player.pos = float2( float( TARGET_W / 2 ), g_scene.player.rad )
-    g_scene.player.gun_active = false
-    clear( g_scene.player.guns )
-    clear( g_scene.bullets )
-    clear( g_scene.mobs )
     g_scene.player.guns <- setup_gun( gun_type basic, g_assets.player.scale )
-    g_scene.player.health = PLAYER_MAX_HEALTH
-    g_scene.player.immortal = false
     g_scene.bkg_scroll = 0.
     g_scene.spawner = 1.
     g_scene.score = 0
