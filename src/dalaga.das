@@ -15,7 +15,7 @@ let
     PLAYER_IMMORTAL_BLINKER_SEG = PLAYER_IMMORTAL_TIMER / float(PLAYER_IMMORTAL_BLINKER_COUNT)
 
     MOB_STATIC_SPEED = 200.
-    MOB_CHASER_SPEED = 50.
+    MOB_CHASER_SPEED = 75.
 
     BKG_SCROLL_SPD = 50.
     COLLISION_DMG = 1
@@ -324,26 +324,6 @@ def render_ui()
         let w = get_text_size( txt )
         text_out( ( TARGET_W * g_screen_scale - int( w.x ) ) / 2, ( TARGET_H * g_screen_scale - int( w.y ) ) / 2, txt, 0xffff0000 )
 
-def process_input()
-    if g_scene.player.health <= 0 && get_key_up( VK_SPACE )
-        reset()
-        return
-
-    var dx = float2( 0, 0 )
-    dx.x += get_key( VK_RIGHT ) || get_key( VK_D ) ? +1. : 0.
-    dx.x += get_key( VK_LEFT ) || get_key( VK_A ) ? -1. : 0.
-    dx.y += get_key( VK_UP ) || get_key( VK_W ) ? +1. : 0.
-    dx.y += get_key( VK_DOWN ) || get_key( VK_S ) ? -1. : 0.
-
-    // dx += get_mouse_velocity()
-
-    var dl = length( dx )
-    if ( dl > FLT_MIN )
-        dx /= dl
-    g_scene.player.vel = dx * PLAYER_SPD
-    g_scene.player.gun_active = get_key( VK_SPACE ) || get_mouse_button_down( MB_LEFT )
-
-
 def process_gun( pos: float2 ; vel: float2 ; var guns: array<gun_info>& ; dt : float )
     for g in guns
         g.timer += dt
@@ -483,9 +463,33 @@ def process_act( dt: float )
 
     // g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
 
+def process_input()
+    if g_scene.player.health <= 0 && get_key_up( VK_SPACE )
+        reset()
+        return
+
+    var dx = float2( 0, 0 )
+    dx.x += get_key( VK_RIGHT ) || get_key( VK_D ) ? +1. : 0.
+    dx.x += get_key( VK_LEFT ) || get_key( VK_A ) ? -1. : 0.
+    dx.y += get_key( VK_UP ) || get_key( VK_W ) ? +1. : 0.
+    dx.y += get_key( VK_DOWN ) || get_key( VK_S ) ? -1. : 0.
+    dx *= PLAYER_SPD
+
+    let mx = get_mouse_velocity() * 2.
+    dx += float2( mx.x, -mx.y )
+
+    var dl = length( dx )
+    if ( dl > FLT_MIN )
+        dx /= dl
+        dx *= min( dl, PLAYER_SPD )
+
+    g_scene.player.vel = dx
+    g_scene.player.gun_active = get_key( VK_SPACE ) || get_mouse_button( MB_LEFT )
+
 def reinit()
     g_screen_scale = g_screen_scale == 0 ? g_screen_scale_max : g_screen_scale
     set_resolution( TARGET_W * g_screen_scale, TARGET_H * g_screen_scale )
+    set_relative_mouse_mode(true)
 
 def reset()
     g_scene.player := player_info()
