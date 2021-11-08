@@ -215,11 +215,11 @@ def spawn_mob( pos : float ; t: mob_type )
         m.score = 10
         m.atl_idx = 2
         gn = gun_type mob_double_wide
-    else
+    elif t == mob_type scroller_dummy
         m.health = 2
         m.rad = 12.
         m.pos.x = pos
-        m.vel = float2( 0, -1 ) * MOB_STATIC_SPEED
+        m.vel = float2( 0, -1 ) * MOB_STATIC_SPEED * 0.5
         m.score = 1
         m.atl_idx = 0
     if gn != gun_type gun_type_count
@@ -496,7 +496,7 @@ def process_act( dt: float )
     for i in chasers
         var m& = g_scene.mobs[i]
         let v = m.pos.x - g_scene.player.pos.x
-        m.vel.y = -MOB_STATIC_SPEED
+        m.vel.y = -MOB_CHASER_SPEED
         m.vel.x = 0.
         if ( v > 0. )
             m.vel.x = -MOB_CHASER_SPEED
@@ -508,10 +508,10 @@ def process_act( dt: float )
 
     g_scene.spawner -= dt
     if ( g_scene.spawner <= 0. )
-        g_scene.spawner = max( 1.f / speed_mult, 0.1f ) + random_float( g_scene.rnd_seed ) / speed_mult
+        g_scene.spawner = max( 1.f / speed_mult, 0.05f ) + random_float( g_scene.rnd_seed ) / speed_mult
         let rnd = random_float( g_scene.rnd_seed )
         var t = mob_type scroller_dummy
-        if ( rnd < 0.2 )
+        if ( rnd < 0.1 )
             t = mob_type chaser_shooter
         elif ( rnd < 0.5 )
             t = mob_type scroller_shooter
