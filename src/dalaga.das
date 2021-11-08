@@ -20,7 +20,7 @@ let
     STAGE_SPEED_SEG = 5.
     STAGE_SPEED_MUL = 0.5
 
-    BKG_SCROLL_SPD = 50.
+    BKG_SCROLL_SPD = 20.
     COLLISION_DMG = 1
 
 struct player_info
@@ -233,26 +233,26 @@ def render_bkg()
 
     fill_rect( 0, 0, get_screen_width(), get_screen_height(), 0x0 )
 
-    var rnd_seed = int4( 1, 2, 3, 4 )
-
     let reg_scaled = reg * g_screen_scale
     let rnd_ofs_limit = int2( reg - g_assets.stars.width, reg - g_assets.stars.height ) * g_screen_scale
 
     let bkg_offset = g_scene.bkg_scroll * float( g_screen_scale )
 
-    for yy in range( 0, rows )
-        // let bkg_delta = bkg_offset % float( reg_scaled )
-        let bkg_delta = 0. // TEMP
+    for yy in range( -1, rows )
+        let bkg_delta = bkg_offset % float( reg_scaled )
+        let row = yy - int( bkg_offset / float( reg_scaled ) )
+        var rnd_seed = int4( row, row, row, row )
 
         for xx in range( 0, cols )
-            let rnd = random_int4( rnd_seed )
+            let rnd = random_int( rnd_seed )
+            let rnd4 = random_int4( rnd_seed )
 
-            let x = float( xx * reg_scaled + rnd.x % rnd_ofs_limit.x )
-            let y = float( yy * reg_scaled + rnd.y % rnd_ofs_limit.y )
-            let f = ( rnd.z % g_assets.stars.frames ) * g_assets.stars.width
+            let x = float( xx * reg_scaled + random_int( rnd_seed ) % rnd_ofs_limit.x )
+            let y = float( yy * reg_scaled + random_int( rnd_seed ) % rnd_ofs_limit.y )
+            let f = ( rnd % g_assets.stars.frames ) * g_assets.stars.width
             let fc = float( g_assets.stars.width )
-            let c = 0xff000000 | uint( rnd.x % 16 + 0 ) << 0x10 | uint( rnd.y % 8 + 0 ) << 0x8 | uint( rnd.w % 32 + 16 )
-            let s = g_assets.stars.width * ( 1 + rnd.w % g_screen_scale )
+            let c = 0xff000000 | uint( rnd4.x % 16 + 0 ) << 0x10 | uint( rnd4.y % 8 + 0 ) << 0x8 | uint( rnd4.y % 32 + 16 )
+            let s = g_assets.stars.width * ( 1 + random_int( rnd_seed ) % g_screen_scale )
 
             if g_scene.player.health > 0
                 draw_image_region( g_assets.stars.img, x, y + bkg_delta, float4( float( f ), 0., fc, fc ), c, float2( s, s ) )
@@ -470,10 +470,10 @@ def process_act( dt: float )
     // debug( "bullets:{length(g_scene.bullets)}" )
     // debug( "mobs:{length(g_scene.mobs)}" );
 
-    // g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
+    g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
 
 def process_input()
-    if g_scene.player.health <= 0 && get_key_up( VK_SPACE )
+    if g_scene.player.health <= 0 && ( get_key_up( VK_SPACE ) || get_mouse_button_up( MB_LEFT ) )
         reset()
         return
 
