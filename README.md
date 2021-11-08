@@ -8,7 +8,6 @@ run dalaga.cmd
 # Controls
 movement - WASD / arrow keys / mouse \
 shoot - space / LMB \
-
 addition: \
   P - pause \
   X - change render scale \
