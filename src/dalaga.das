@@ -357,7 +357,7 @@ def render_ui()
     formated_score += score_text
 
     let sw = get_text_size( formated_score )
-    text_out( ( TARGET_W * g_screen_scale - int( sw.x ) ) / 2, 0, formated_score, 0xff777777 )
+    text_out( ( TARGET_W * g_screen_scale - int( sw.x ) ) / 2, 0, formated_score, 0xffffff00 )
 
     if g_scene.player.health <= 0
         let txt = "GAME OVER"
