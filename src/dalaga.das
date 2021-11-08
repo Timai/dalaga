@@ -291,6 +291,8 @@ def render_dyn()
             circle( bp.x, bp.y, p.rad * 0.75 * float( g_screen_scale ), 0xff00ffff )
         if p.gtype == gun_type radial
             circle( bp.x, bp.y, p.rad * 0.5 * float( g_screen_scale ), 0xffffff00 )
+        if p.gtype == gun_type gun_type_count
+            circle( bp.x, bp.y, p.rad * 0.25 * float( g_screen_scale ), 0xffff0000 )
 
     disable_alpha_blend()
 
@@ -387,12 +389,14 @@ def process_act( dt: float )
         if m.health <= 0
             g_scene.score += m.score
 
-            if random_float( g_scene.rnd_seed ) < 0.2
+            if random_float( g_scene.rnd_seed ) < 0.1
                 var p = powerup()
                 p.pos = m.pos
                 let rnd = random_float( g_scene.rnd_seed )
-                p.gtype = gun_type radial
-                if rnd < 0.5
+                p.gtype = gun_type gun_type_count
+                if rnd < 0.1
+                    p.gtype = gun_type radial
+                elif rnd < 0.3
                     p.gtype = gun_type fast_rows
                 elif rnd < 0.8
                     p.gtype = gun_type super_rows
@@ -408,7 +412,10 @@ def process_act( dt: float )
         p.timer -= dt
         if ( p.timer > 0. )
             if check_sphere_collision( p.pos, g_scene.player.pos, p.rad, g_scene.player.rad )
-                g_scene.player.guns <- setup_gun( p.gtype, g_assets.player.scale )
+                if p.gtype == gun_type gun_type_count
+                    g_scene.player.health = min( g_scene.player.health + 1, PLAYER_MAX_HEALTH )
+                else
+                    g_scene.player.guns <- setup_gun( p.gtype, g_assets.player.scale )
                 p.timer = 0.
 
     remove_if( g_scene.powerups ) <| $(v : powerup)
@@ -449,7 +456,7 @@ def process_act( dt: float )
         g_scene.spawner = max( 1.f / speed_mult, 0.1f ) + random_float( g_scene.rnd_seed ) / speed_mult
         let rnd = random_float( g_scene.rnd_seed )
         var t = mob_type scroller_dummy
-        if ( rnd < 0.25 )
+        if ( rnd < 0.2 )
             t = mob_type chaser_shooter
         elif ( rnd < 0.5 )
             t = mob_type scroller_shooter

@@ -90,7 +90,7 @@ def private setup_mob_type_1() : atls_dyn
     "    ###$###    " +
     "    #@###@#    " +
     "    # @#@ #    ",
-    {{ ' ' => 0x0; '#' => 0xffffff55; '@' => 0xff777777; '$' => 0xffff0000 }} )
+    {{ ' ' => 0x0; '#' => 0xffeeee77; '@' => 0xffcccc77; '$' => 0xffff0000 }} )
     return <- res
 
 def private setup_mob_type_2() : atls_dyn
