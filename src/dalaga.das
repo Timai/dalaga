@@ -17,6 +17,9 @@ let
     MOB_STATIC_SPEED = 200.
     MOB_CHASER_SPEED = 75.
 
+    STAGE_SPEED_SEG = 5.
+    STAGE_SPEED_MUL = 0.5
+
     BKG_SCROLL_SPD = 50.
     COLLISION_DMG = 1
 
@@ -73,6 +76,7 @@ struct scene
     bkg_scroll : float
     rnd_seed : int4
     score : int
+    age : float
 
 struct bullet
     pos : float2
@@ -195,7 +199,7 @@ def spawn_mob( pos : float ; t: mob_type )
         m.atl_idx = 1
         gn = gun_type mob_double
     elif t == mob_type chaser_shooter
-        m.health = 5
+        m.health = 10
         m.rad = 12.
         m.pos.x = pos
         m.vel = float2( 0, -1 ) * MOB_STATIC_SPEED
@@ -203,7 +207,7 @@ def spawn_mob( pos : float ; t: mob_type )
         m.atl_idx = 2
         gn = gun_type mob_double_wide
     else
-        m.health = 5
+        m.health = 2
         m.rad = 12.
         m.pos.x = pos
         m.vel = float2( 0, -1 ) * MOB_STATIC_SPEED
@@ -284,7 +288,7 @@ def render_dyn()
         let bp = wpos_to_spos( p.pos )
         circle( bp.x, bp.y, p.rad * float( g_screen_scale ), 0xffffffff )
         if p.gtype == gun_type super_rows || p.gtype == gun_type radial
-            circle( bp.x, bp.y, p.rad * 0.75 * float( g_screen_scale ), 0xfff0000 )
+            circle( bp.x, bp.y, p.rad * 0.75 * float( g_screen_scale ), 0xff000ff )
         if p.gtype == gun_type radial
             circle( bp.x, bp.y, p.rad * 0.5 * float( g_screen_scale ), 0xffffff00 )
 
@@ -355,6 +359,8 @@ def process_bullet_collision( pos : float2 ; rad : float ; player : bool ) : int
 def process_act( dt: float )
     if g_paused || g_scene.player.health <= 0
         return
+    g_scene.age += dt
+    let speed_mult = 1.f + ( g_scene.age / STAGE_SPEED_SEG ) * STAGE_SPEED_MUL
 
     // player pos
     g_scene.player.pos += g_scene.player.vel * dt
@@ -417,7 +423,10 @@ def process_act( dt: float )
             m.health = 0
         if m.health > 0
             if m.t == mob_type chaser_shooter
-                push( chasers, i )
+                if m.pos.y > g_scene.player.pos.y
+                    push( chasers, i )
+                else
+                    m.vel.x = 0.
             process_gun( m.pos, m.vel, m.guns, dt )
             if check_sphere_collision( m.pos, g_scene.player.pos, m.rad, g_scene.player.rad )
                 player_dmg += COLLISION_DMG
@@ -437,7 +446,7 @@ def process_act( dt: float )
 
     g_scene.spawner -= dt
     if ( g_scene.spawner <= 0. )
-        g_scene.spawner = 0.5f + random_float( g_scene.rnd_seed ) * 1.
+        g_scene.spawner = max( 1.f / speed_mult, 0.1f ) + random_float( g_scene.rnd_seed ) / speed_mult
         let rnd = random_float( g_scene.rnd_seed )
         var t = mob_type scroller_dummy
         if ( rnd < 0.25 )
@@ -498,6 +507,7 @@ def reset()
     g_scene.bkg_scroll = 0.
     g_scene.spawner = 1.
     g_scene.score = 0
+    g_scene.age = 0.
     clear( g_scene.bullets )
     clear( g_scene.mobs )
     randomize_seed( g_scene.rnd_seed )
