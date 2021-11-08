@@ -22,6 +22,7 @@ let
 
     BKG_SCROLL_SPD = 20.
     COLLISION_DMG = 1
+    FX_BULLET_COLLISION_LIFE = 0.15f
 
 struct player_info
     pos : float2
@@ -72,6 +73,7 @@ struct scene
     bullets : array<bullet>
     mobs    : array<mob_info>
     powerups : array<powerup>
+    effects  : array<fx_sprite>
     spawner : float
     bkg_scroll : float
     rnd_seed : int4
@@ -89,6 +91,13 @@ struct powerup
     gtype : gun_type
     timer : float = 5.
     rad = 10.
+
+struct fx_sprite
+    pos : float2
+    rnd : int
+    parts : int = 10
+    size : float = 10.
+    life : float = 0.
 
 var
     g_screen_scale : int = 2
@@ -294,6 +303,19 @@ def render_dyn()
         if p.gtype == gun_type gun_type_count
             circle( bp.x, bp.y, p.rad * 0.25 * float( g_screen_scale ), 0xffff0000 )
 
+    for fx in g_scene.effects
+        var seed = int4( fx.rnd, fx.rnd, fx.rnd, fx.rnd )
+        for i in range( 0, fx.parts )
+            var v = float2( random_float( seed ), random_float( seed ) )
+            v -= float2( 0.5, 0.5 )
+            let vl = length( v )
+            if ( vl > FLT_MIN )
+                v /= vl
+            let l = fx.life / FX_BULLET_COLLISION_LIFE
+            let p = wpos_to_spos( fx.pos + v * l * ( 5. + random_float( seed ) * fx.size * 0.5 ) )
+            let d = wpos_to_spos( fx.pos + v * l * ( 10. + random_float( seed ) * fx.size ) )
+            line( p.x, p.y, d.x, d.y, 0xffffffff )
+
     disable_alpha_blend()
 
 def render_debug()
@@ -357,6 +379,15 @@ def process_bullet_collision( pos : float2 ; rad : float ; player : bool ) : int
             b.dmg = 0
     return dmg
 
+def add_fx_sprite( pos : float2 ; parts : int = 0 ; size : float = 0. )
+    var s = fx_sprite()
+    s.pos = pos
+    s.rnd = random_int( g_scene.rnd_seed )
+    if ( parts > 0 )
+        s.parts = parts
+    if ( size > 0. )
+        s.size = size
+    push( g_scene.effects, s )
 
 def process_act( dt: float )
     if g_paused || g_scene.player.health <= 0
@@ -383,11 +414,17 @@ def process_act( dt: float )
 
     var player_dmg = 0
     player_dmg = process_bullet_collision( g_scene.player.pos, g_scene.player.rad, false )
+    if player_dmg > 0
+        add_fx_sprite( g_scene.player.pos )
 
     for m in g_scene.mobs
-        m.health -= process_bullet_collision( m.pos, m.rad, true )
+        var dmg = process_bullet_collision( m.pos, m.rad, true )
+        m.health -= dmg
+        if dmg > 0 && m.health > 0
+            add_fx_sprite( m.pos + float2( 0., -m.rad ) )
         if m.health <= 0
             g_scene.score += m.score
+            add_fx_sprite( m.pos, 40, 40. )
 
             if random_float( g_scene.rnd_seed ) < 0.1
                 var p = powerup()
@@ -474,8 +511,16 @@ def process_act( dt: float )
 
     g_scene.player.immortal_timer = max( g_scene.player.immortal_timer - dt, 0. )
 
+    // effects
+    for fx in g_scene.effects
+        fx.life += dt
+    remove_if( g_scene.effects ) <| $(v : fx_sprite)
+        return v.life >= FX_BULLET_COLLISION_LIFE
+
     // debug( "bullets:{length(g_scene.bullets)}" )
     // debug( "mobs:{length(g_scene.mobs)}" );
+    // debug( "powerups:{length(g_scene.powerups)}" );
+    // debug( "effects:{length(g_scene.effects)}" );
 
     g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
 
@@ -517,6 +562,8 @@ def reset()
     g_scene.age = 0.
     clear( g_scene.bullets )
     clear( g_scene.mobs )
+    clear( g_scene.powerups )
+    clear( g_scene.effects )
     randomize_seed( g_scene.rnd_seed )
 
 [export]
