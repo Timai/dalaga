@@ -288,7 +288,7 @@ def render_dyn()
         let bp = wpos_to_spos( p.pos )
         circle( bp.x, bp.y, p.rad * float( g_screen_scale ), 0xffffffff )
         if p.gtype == gun_type super_rows || p.gtype == gun_type radial
-            circle( bp.x, bp.y, p.rad * 0.75 * float( g_screen_scale ), 0xff000ff )
+            circle( bp.x, bp.y, p.rad * 0.75 * float( g_screen_scale ), 0xff00ffff )
         if p.gtype == gun_type radial
             circle( bp.x, bp.y, p.rad * 0.5 * float( g_screen_scale ), 0xffffff00 )
 
