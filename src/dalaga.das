@@ -329,6 +329,19 @@ def render_debug()
         var mp = wpos_to_spos( m.pos )
         circle( mp.x, mp.y, m.rad * float( g_screen_scale ), 0xffff0000 )
 
+    set_font_name( "mono" )
+    set_font_size( 8 * g_screen_scale )
+    let speed_mult = 1.f + ( g_scene.age / STAGE_SPEED_SEG ) * STAGE_SPEED_MUL
+
+    let txt = "mobs: {length(g_scene.mobs)}
+bullets: {length(g_scene.bullets)}
+effects: {length(g_scene.effects)}
+powerups: {length(g_scene.powerups)}
+
+stage:{g_scene.age / STAGE_SPEED_SEG}
+spawner_mul:{speed_mult}"
+    text_out( 0, 0, txt, 0xffffffff )
+
 def render_ui()
     let s = int2( 50, 10 )
     let ofs = int2( ( TARGET_W - s.x ) * g_screen_scale, ( TARGET_H - s.y ) * g_screen_scale )
@@ -351,6 +364,11 @@ def render_ui()
         set_font_size( 40 * g_screen_scale )
         let w = get_text_size( txt )
         text_out( ( TARGET_W * g_screen_scale - int( w.x ) ) / 2, ( TARGET_H * g_screen_scale - int( w.y ) ) / 2, txt, 0xffff0000 )
+
+    set_font_size( 8 * g_screen_scale )
+    let helper = "WASD/arr/mouse:move | shoot:space/LMB | pause:P | wnd scale:X | debug:O"
+    let hs = int2( get_text_size( helper ) )
+    text_out( 0, TARGET_H * g_screen_scale - hs.y, helper, 0xffffffff )
 
 def process_gun( pos: float2 ; vel: float2 ; var guns: array<gun_info>& ; dt : float )
     for g in guns
@@ -517,11 +535,6 @@ def process_act( dt: float )
     remove_if( g_scene.effects ) <| $(v : fx_sprite)
         return v.life >= FX_BULLET_COLLISION_LIFE
 
-    // debug( "bullets:{length(g_scene.bullets)}" )
-    // debug( "mobs:{length(g_scene.mobs)}" );
-    // debug( "powerups:{length(g_scene.powerups)}" );
-    // debug( "effects:{length(g_scene.effects)}" );
-
     g_scene.bkg_scroll += dt * BKG_SCROLL_SPD
 
 def process_input()
@@ -585,7 +598,7 @@ def act(dt: float)
         g_paused = ! g_paused
     if get_key_up(VK_O)
         g_draw_debug = !g_draw_debug
-    if get_key(VK_X)
+    if get_key_up(VK_X)
         g_screen_scale = ( g_screen_scale ) % ( g_screen_scale_max ) + 1
         reinit()
     process_input()
