@@ -100,7 +100,7 @@ struct fx_sprite
     life : float = 0.
 
 var
-    g_screen_scale : int = 2
+    g_screen_scale : int = 0
     g_screen_scale_max : int
     g_draw_debug : bool = false
     g_paused : bool = false
