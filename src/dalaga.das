@@ -582,6 +582,7 @@ def reset()
 [export]
 def initialize
     set_window_title("dalaga")
+    disable_auto_upscale()
     let h = float( get_desktop_height() ) * 0.95
     g_screen_scale_max = max( int( h / float(TARGET_H) ), 1 )
     reinit()
